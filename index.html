@@ -1081,6 +1081,8 @@ function placeOrder(){
   var t = cartTotals();
   var orderNum = Math.floor(100 + Math.random()*800);
 
+  notifyCafeOfOrder(name, phone, day, time, t, orderNum);
+
   document.getElementById('checkout-wrap').innerHTML =
     '<div class="cc-success">' +
       '<div class="stamp-badge">Order Placed</div>' +
@@ -1090,6 +1092,47 @@ function placeOrder(){
       '<p class="cc-note">You\'ll get a "ready for pickup" alert as soon as it\'s boxed. Payment is taken in store, 30 Katanning St, Bayswater.</p>' +
       '<button class="btn" style="margin-top:18px;" onclick="startNewOrder()">Start a new order</button>' +
     '</div>';
+}
+
+/* ---------- Notify the cafe (email/SMS via the notify-order function) ----------
+   This runs in the background and never blocks the customer's confirmation screen:
+   if the notification fails (bad wifi, function down, whatever), the customer still
+   sees "Order Placed" so they aren't stuck or double-charged. The tradeoff is that a
+   failed notification could mean the cafe never sees the order -- worth keeping an eye
+   on the Netlify function logs occasionally until real order volume proves this solid. */
+function notifyCafeOfOrder(name, phone, day, time, totals, orderNum){
+  var items = Object.keys(cart).map(function(key){
+    var line = cart[key];
+    var bits = [];
+    if(line.sizeLabel) bits.push(line.sizeLabel);
+    if(line.choiceLabel) bits.push(line.choiceLabel);
+    if(line.multiChoiceLabels && line.multiChoiceLabels.length) bits.push(line.multiChoiceLabels.join(', '));
+    if(line.addonLabels && line.addonLabels.length) bits.push(line.addonLabels.join(', '));
+    return {
+      name: line.name,
+      qty: line.qty,
+      unitPrice: line.price,
+      selectionText: bits.join(' · '),
+      notes: line.notes || ''
+    };
+  });
+
+  fetch('/.netlify/functions/notify-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId: 'W' + orderNum,
+      cafeName: 'Wunderbar Lunchbar',
+      customerName: name,
+      phone: phone,
+      pickupDay: day,
+      pickupTime: time,
+      total: totals.total,
+      items: items
+    })
+  }).catch(function(err){
+    console.error('Order notification failed to send:', err);
+  });
 }
 
 function startNewOrder(){
