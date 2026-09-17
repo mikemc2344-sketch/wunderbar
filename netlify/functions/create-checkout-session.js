@@ -72,6 +72,7 @@ exports.handler = async (event) => {
 
   const stripeBody = {
     mode: 'payment',
+       managed_payments: { enabled: false },
     success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/`,
     line_items: items.map((item) => ({
