@@ -742,7 +742,7 @@ footer a{text-decoration:underline;}
       <div class="r-total"><span>Total</span><span id="co-total">$0.00</span></div>
     </div>
 
-    <button class="btn detail-add-btn" onclick="placeOrder()">Proceed to Payment</button>
+    <button class="btn detail-add-btn" onclick="goToStripeCheckout()" id="checkout-submit-btn">Proceed to Payment</button>
     <p class="cc-note">This starts checkout — full payment (Stripe) connects here on the live site.</p>
     <div id="co-error-slot"></div>
   </div>
@@ -1066,10 +1066,12 @@ function renderCheckoutSummary(){
   document.getElementById('co-error-slot').innerHTML = '';
 }
 
-function placeOrder(){
+/* ---------- Send the customer to Stripe to actually pay ---------- */
+function goToStripeCheckout(){
   var name = document.getElementById('custName').value.trim();
   var phone = document.getElementById('custPhone').value.trim();
   var errorSlot = document.getElementById('co-error-slot');
+  errorSlot.innerHTML = '';
 
   if(!name || !phone){
     errorSlot.innerHTML = '<p class="cc-error">Add your name and phone number so the kitchen can call if anything changes.</p>';
@@ -1078,30 +1080,45 @@ function placeOrder(){
 
   var day = document.getElementById('pickupDay').value;
   var time = document.getElementById('pickupTime').value;
-  var t = cartTotals();
   var orderNum = Math.floor(100 + Math.random()*800);
 
-  notifyCafeOfOrder(name, phone, day, time, t, orderNum);
+  var items = buildItemsForNotification();
 
-  document.getElementById('checkout-wrap').innerHTML =
-    '<div class="cc-success">' +
-      '<div class="stamp-badge">Order Placed</div>' +
-      '<div class="cc-num">#' + orderNum + '</div>' +
-      '<p class="cc-note" style="margin-top:0;">Total paid: $' + t.total.toFixed(2) + '</p>' +
-      '<p class="cc-note">' + name + ' &middot; ' + phone + '<br>Pickup: ' + day + ', ' + time + '</p>' +
-      '<p class="cc-note">You\'ll get a "ready for pickup" alert as soon as it\'s boxed. Payment is taken in store, 30 Katanning St, Bayswater.</p>' +
-      '<button class="btn" style="margin-top:18px;" onclick="startNewOrder()">Start a new order</button>' +
-    '</div>';
+  var btn = document.getElementById('checkout-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Redirecting to payment...';
+
+  fetch('/.netlify/functions/create-checkout-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId: 'W' + orderNum,
+      cafeName: 'Wunderbar Lunchbar',
+      customerName: name,
+      phone: phone,
+      pickupDay: day,
+      pickupTime: time,
+      items: items
+    })
+  })
+  .then(function(res){ return res.json().then(function(data){ return { ok: res.ok, data: data }; }); })
+  .then(function(result){
+    if(result.ok && result.data.url){
+      window.location.href = result.data.url;
+    } else {
+      throw new Error((result.data && result.data.error) || 'Could not start payment.');
+    }
+  })
+  .catch(function(err){
+    console.error('Checkout session creation failed:', err);
+    errorSlot.innerHTML = '<p class="cc-error">Something went wrong starting payment: ' + err.message + '. Please try again.</p>';
+    btn.disabled = false;
+    btn.textContent = 'Proceed to Payment';
+  });
 }
 
-/* ---------- Notify the cafe (email/SMS via the notify-order function) ----------
-   This runs in the background and never blocks the customer's confirmation screen:
-   if the notification fails (bad wifi, function down, whatever), the customer still
-   sees "Order Placed" so they aren't stuck or double-charged. The tradeoff is that a
-   failed notification could mean the cafe never sees the order -- worth keeping an eye
-   on the Netlify function logs occasionally until real order volume proves this solid. */
-function notifyCafeOfOrder(name, phone, day, time, totals, orderNum){
-  var items = Object.keys(cart).map(function(key){
+function buildItemsForNotification(){
+  return Object.keys(cart).map(function(key){
     var line = cart[key];
     var bits = [];
     if(line.sizeLabel) bits.push(line.sizeLabel);
@@ -1112,27 +1129,60 @@ function notifyCafeOfOrder(name, phone, day, time, totals, orderNum){
       name: line.name,
       qty: line.qty,
       unitPrice: line.price,
-      selectionText: bits.join(' · '),
+      selectionText: bits.join(' \u00b7 '),
       notes: line.notes || ''
     };
   });
+}
 
-  fetch('/.netlify/functions/notify-order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId: 'W' + orderNum,
-      cafeName: 'Wunderbar Lunchbar',
-      customerName: name,
-      phone: phone,
-      pickupDay: day,
-      pickupTime: time,
-      total: totals.total,
-      items: items
+/* ---------- Handle the customer returning from Stripe after paying ----------
+   Stripe redirects back to this same page with ?session_id=... in the URL.
+   We verify the payment server-side (never trust the URL alone) and send the
+   order notification only once that's confirmed -- see confirm-order.js. */
+function checkForStripeReturn(){
+  var params = new URLSearchParams(window.location.search);
+  var sessionId = params.get('session_id');
+  if(!sessionId) return;
+
+  window.history.replaceState({}, '', window.location.pathname);
+
+  showPage('page-checkout');
+  document.getElementById('checkout-wrap').innerHTML =
+    '<div class="cc-success"><p class="cc-note">Confirming your payment\u2026</p></div>';
+
+  fetch('/.netlify/functions/confirm-order?session_id=' + encodeURIComponent(sessionId))
+    .then(function(res){ return res.json().then(function(data){ return { ok: res.ok, data: data }; }); })
+    .then(function(result){
+      if(result.ok && result.data.ok){
+        renderPaidConfirmation(result.data.order);
+      } else {
+        renderConfirmationError((result.data && result.data.error) || 'Could not confirm this payment.');
+      }
     })
-  }).catch(function(err){
-    console.error('Order notification failed to send:', err);
-  });
+    .catch(function(err){
+      renderConfirmationError('Could not reach the server to confirm payment: ' + err.message);
+    });
+}
+
+function renderPaidConfirmation(order){
+  document.getElementById('checkout-wrap').innerHTML =
+    '<div class="cc-success">' +
+      '<div class="stamp-badge">Order Placed</div>' +
+      '<div class="cc-num">#' + order.orderId + '</div>' +
+      '<p class="cc-note" style="margin-top:0;">Total paid: $' + order.total.toFixed(2) + '</p>' +
+      '<p class="cc-note">' + order.customerName + ' &middot; ' + order.phone + '<br>Pickup: ' + order.pickupDay + ', ' + order.pickupTime + '</p>' +
+      '<p class="cc-note">You\'ll get a "ready for pickup" alert as soon as it\'s boxed. 30 Katanning St, Bayswater.</p>' +
+      '<button class="btn" style="margin-top:18px;" onclick="startNewOrder()">Start a new order</button>' +
+    '</div>';
+}
+
+function renderConfirmationError(message){
+  document.getElementById('checkout-wrap').innerHTML =
+    '<div class="cc-success">' +
+      '<p class="cc-error" style="margin-top:0;">' + message + '</p>' +
+      '<p class="cc-note">If you were charged, please contact us directly so we can sort it out -- don\'t place a second order.</p>' +
+      '<button class="btn" style="margin-top:18px;" onclick="startNewOrder()">Back to menu</button>' +
+    '</div>';
 }
 
 function startNewOrder(){
@@ -1160,6 +1210,7 @@ function formatTime(h, m){
   return h12 + ':' + (m < 10 ? '0' + m : m) + period;
 }
 buildTimeOptions();
+checkForStripeReturn();
 </script>
 
 </body>
