@@ -1,0 +1,215 @@
+{
+    "id": "acct_1UI1KKP0a8euzgx4",
+    "object": "v2.core.account",
+    "applied_configurations": [
+        "recipient",
+        "merchant"
+    ],
+    "closed": false,
+    "configuration": {
+        "customer": null,
+        "merchant": {
+            "applied": true,
+            "bacs_debit_payments": {
+                "display_name": "Stripe",
+                "service_user_number": "449900"
+            },
+            "branding": {
+                "icon": null,
+                "logo": null,
+                "primary_color": null,
+                "secondary_color": null
+            },
+            "capabilities": {
+                "ach_debit_payments": null,
+                "acss_debit_payments": null,
+                "affirm_payments": null,
+                "afterpay_clearpay_payments": null,
+                "alma_payments": null,
+                "amazon_pay_payments": null,
+                "au_becs_debit_payments": null,
+                "bacs_debit_payments": null,
+                "bancontact_payments": null,
+                "blik_payments": null,
+                "boleto_payments": null,
+                "card_payments": {
+                    "status": "active",
+                    "status_details": []
+                },
+                "cartes_bancaires_payments": null,
+                "cashapp_payments": null,
+                "eps_payments": null,
+                "fpx_payments": null,
+                "gb_bank_transfer_payments": null,
+                "grabpay_payments": null,
+                "ideal_payments": null,
+                "jcb_payments": null,
+                "jp_bank_transfer_payments": null,
+                "kakao_pay_payments": null,
+                "klarna_payments": null,
+                "konbini_payments": null,
+                "kr_card_payments": null,
+                "link_payments": null,
+                "mobilepay_payments": null,
+                "multibanco_payments": null,
+                "mx_bank_transfer_payments": null,
+                "naver_pay_payments": null,
+                "oxxo_payments": null,
+                "p24_payments": null,
+                "pay_by_bank_payments": null,
+                "payco_payments": null,
+                "paynow_payments": null,
+                "promptpay_payments": null,
+                "revolut_pay_payments": null,
+                "samsung_pay_payments": null,
+                "sepa_bank_transfer_payments": null,
+                "sepa_debit_payments": null,
+                "stripe_balance": {
+                    "payouts": {
+                        "status": "active",
+                        "status_details": []
+                    }
+                },
+                "sunbit_payments": null,
+                "swish_payments": null,
+                "twint_payments": null,
+                "us_bank_transfer_payments": null,
+                "zip_payments": null
+            },
+            "card_payments": {
+                "decline_on": {
+                    "avs_failure": false,
+                    "cvc_failure": false
+                }
+            },
+            "konbini_payments": null,
+            "mcc": "5499",
+            "script_statement_descriptor": {
+                "kana": {
+                    "descriptor": null,
+                    "prefix": null
+                },
+                "kanji": {
+                    "descriptor": null,
+                    "prefix": null
+                }
+            },
+            "sepa_debit_payments": null,
+            "smart_disputes": {
+                "auto_respond": {
+                    "preference": "inherit",
+                    "value": "on"
+                }
+            },
+            "statement_descriptor": {
+                "descriptor": "mike.goldenbee.fyi",
+                "prefix": "mike.golde"
+            },
+            "support": {
+                "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": null,
+                    "state": null,
+                    "town": null
+                },
+                "email": null,
+                "phone": null,
+                "url": null
+            }
+        },
+        "recipient": {
+            "applied": true,
+            "capabilities": {
+                "bank_accounts": {
+                    "local": null,
+                    "wire": null
+                },
+                "cards": null,
+                "stripe_balance": {
+                    "payouts": {
+                        "status": "active",
+                        "status_details": []
+                    },
+                    "stripe_transfers": {
+                        "status": "active",
+                        "status_details": []
+                    }
+                }
+            },
+            "default_outbound_destination": null
+        }
+    },
+    "contact_email": "mcq1043@gmail.com",
+    "contact_phone": null,
+    "created": "2026-09-21T07:07:50.000Z",
+    "dashboard": "express",
+    "identity": {
+        "attestations": {
+            "directorship_declaration": null,
+            "ownership_declaration": null,
+            "persons_provided": null,
+            "representative_declaration": null,
+            "terms_of_service": {
+                "account": {
+                    "date": "2026-09-22T04:43:50.000Z",
+                    "ip": null,
+                    "user_agent": null
+                }
+            }
+        },
+        "business_details": {
+            "additional_addresses": [],
+            "address": {
+                "city": "Forrestfield",
+                "country": "AU",
+                "line1": "87 Berkshire Road",
+                "line2": null,
+                "postal_code": "6058",
+                "state": "WA",
+                "town": null
+            },
+            "annual_revenue": null,
+            "documents": {
+                "bank_account_ownership_verification": null,
+                "company_license": null,
+                "company_memorandum_of_association": null,
+                "company_ministerial_decree": null,
+                "company_registration_verification": null,
+                "company_tax_id_verification": null,
+                "primary_verification": null,
+                "proof_of_address": null,
+                "proof_of_registration": null,
+                "proof_of_ultimate_beneficial_ownership": null
+            },
+            "estimated_worker_count": null,
+            "id_numbers": [
+                {
+                    "registrar": null,
+                    "type": "au_abn"
+                }
+            ],
+            "monthly_estimated_revenue": null,
+            "phone": "+61447973212",
+            "registered_name": "MICHAEL JAY MCQUEEN",
+            "registration_date": null,
+            "script_addresses": null,
+            "script_names": null,
+            "structure": "sole_proprietorship"
+        },
+        "country": "AU",
+        "entity_type": "company",
+        "individual": null
+    },
+    "defaults": null,
+    "display_name": "Wunderbar Lunchbar (test)",
+    "future_requirements": null,
+    "metadata": {},
+    "requirements": {
+        "entries": [],
+        "summary": null
+    },
+    "livemode": false
+}
