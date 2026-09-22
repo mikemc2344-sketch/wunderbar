@@ -6,6 +6,8 @@
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const TWILIO_ENDPOINT = (sid) => `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function corsHeaders() {
   return {
@@ -27,6 +29,31 @@ function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Looks up a café's row (markup %, notification emails, Stripe account, etc.)
+// by its slug — each Netlify site sets its own CAFE_SLUG env var so this
+// function knows which row belongs to it.
+async function getCafeBySlug(slug) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/cafes?slug=eq.${slug}&select=*`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Supabase lookup failed: ${res.status} ${await res.text()}`);
+  }
+
+  const rows = await res.json();
+  if (rows.length === 0) {
+    throw new Error(`No cafe found for slug "${slug}"`);
+  }
+  return rows[0]; // { id, slug, name, markup_percent, notification_emails, resend_from_address, ... }
 }
 
 function formatOrderText(order) {
@@ -89,18 +116,31 @@ function formatOrderSms(order) {
   return msg.length > 300 ? msg.slice(0, 297) + '...' : msg;
 }
 
+// CHANGED: notification emails and sender address now come from the café's
+// Supabase row (looked up via CAFE_SLUG) instead of NOTIFY_EMAIL/FROM_EMAIL
+// env vars. This is what makes "change it once, updates everywhere" work.
 async function sendEmail(order) {
   const apiKey = process.env.RESEND_API_KEY;
-  const toEmail = process.env.NOTIFY_EMAIL;
-  if (!apiKey || !toEmail) return { skipped: true, reason: 'RESEND_API_KEY or NOTIFY_EMAIL not set' };
+  const cafeSlug = process.env.CAFE_SLUG;
+  if (!apiKey || !cafeSlug) {
+    return { skipped: true, reason: 'RESEND_API_KEY or CAFE_SLUG not set' };
+  }
 
-  const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+  const cafe = await getCafeBySlug(cafeSlug);
+
+  const toEmails = cafe.notification_emails;
+  if (!toEmails || toEmails.length === 0) {
+    return { skipped: true, reason: `No notification_emails set in Supabase for cafe "${cafeSlug}"` };
+  }
+
+  const fromEmail = cafe.resend_from_address || process.env.FROM_EMAIL || 'onboarding@resend.dev';
+
   const res = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: fromEmail,
-      to: toEmail.split(',').map((s) => s.trim()),
+      to: toEmails, // array — Resend sends the same email to every address in it
       subject: `New order — ${order.customerName}${order.cafeName ? ' · ' + order.cafeName : ''}`,
       text: formatOrderText(order),
       html: formatOrderHtml(order),
@@ -172,6 +212,6 @@ function toStripeFormParams(obj, params, prefix) {
 module.exports = {
   corsHeaders, jsonResponse, escapeHtml,
   formatOrderText, formatOrderHtml, formatOrderSms,
-  sendEmail, sendSms, notifyBothChannels,
+  getCafeBySlug, sendEmail, sendSms, notifyBothChannels,
   toStripeFormParams,
 };
