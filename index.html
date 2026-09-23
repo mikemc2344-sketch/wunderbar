@@ -1130,7 +1130,12 @@ function buildItemsForNotification(){
       qty: line.qty,
       unitPrice: line.price,
       selectionText: bits.join(' \u00b7 '),
-      notes: line.notes || ''
+      notes: line.notes || '',
+      // Structured choices so the server can price the order itself
+      sizeLabel: line.sizeLabel || null,
+      choiceLabel: line.choiceLabel || null,
+      multiChoiceLabels: line.multiChoiceLabels || [],
+      addonLabels: line.addonLabels || []
     };
   });
 }

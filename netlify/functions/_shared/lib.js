@@ -56,6 +56,25 @@ async function getCafeBySlug(slug) {
   return rows[0]; // { id, slug, name, markup_percent, notification_emails, resend_from_address, ... }
 }
 
+// Fetches a café's active menu items (the real, pre-markup prices) so the
+// server can price orders itself instead of trusting prices from the browser.
+async function getMenuItems(cafeId) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/menu_items?cafe_id=eq.${cafeId}&active=eq.true&select=id,name,base_price_cents`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Supabase menu lookup failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json(); // [{ id, name, base_price_cents }, ...]
+}
+
 function formatOrderText(order) {
   const lines = [];
   lines.push(`New order${order.cafeName ? ' — ' + order.cafeName : ''}`);
@@ -212,6 +231,6 @@ function toStripeFormParams(obj, params, prefix) {
 module.exports = {
   corsHeaders, jsonResponse, escapeHtml,
   formatOrderText, formatOrderHtml, formatOrderSms,
-  getCafeBySlug, sendEmail, sendSms, notifyBothChannels,
+  getCafeBySlug, getMenuItems, sendEmail, sendSms, notifyBothChannels,
   toStripeFormParams,
 };

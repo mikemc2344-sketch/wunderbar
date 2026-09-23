@@ -24,21 +24,127 @@
  *     "pickupDay": "Today",
  *     "pickupTime": "12:30pm",
  *     "items": [
- *       { "name": "Breaky Wrap", "qty": 2, "unitPrice": 13.89, "selectionText": "Large" }
+ *       { "name": "Latte", "qty": 2, "sizeLabel": "Large", "addonLabels": [],
+ *         "choiceLabel": null, "multiChoiceLabels": [], "notes": "" }
  *     ]
  *   }
- *   unitPrice is still the marked-up, customer-facing price (same as the site displays)
- *   -- the split between cafe and platform is worked out below from the cafe's
- *   markup_percent, so the front-end doesn't need to change.
+ *   PRICES ARE NOT TRUSTED FROM THE BROWSER. Each item is priced here from:
+ *     - menu_items.base_price_cents in Supabase (+ the cafe's markup_percent)
+ *     - the SIZE / ADD-ON price list below (ITEM_OPTIONS)
+ *   Any unitPrice the browser sends is ignored. Unknown or inactive items,
+ *   sizes or add-ons are rejected, so a tampered cart can't get through.
  *
  * ── What it returns ──
  *   { "ok": true, "url": "https://checkout.stripe.com/..." }
  *   Redirect the browser to that URL (window.location.href = url).
  */
 
-const { jsonResponse, corsHeaders, toStripeFormParams, getCafeBySlug } = require('./_shared/lib');
+const { jsonResponse, corsHeaders, toStripeFormParams, getCafeBySlug, getMenuItems } = require('./_shared/lib');
 
 const STRIPE_SESSIONS_ENDPOINT = 'https://api.stripe.com/v1/checkout/sessions';
+
+// ── Sizes, add-ons and free choices (prices in cents, charged as-is, no markup) ──
+// Must match the options shown on the site (PRODUCTS in index.html).
+// If you add an add-on or change its price on the site, change it here too,
+// otherwise orders using it will be rejected.
+const ITEM_OPTIONS = {
+  'Benedict Bagel':          { addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'English Breaky Muffin':   { addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'Breaky Wrap':             { addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'Bacon, Cheese & Egg Wrap':{ addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'Breaky Burger':           { addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'Tradie Breaky Long Roll': { addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'Spicy Chicken Burger':    { addons: { 'Extra Cheese': 150, 'Extra Bacon': 200, 'Extra Sauce': 100 } },
+  'Chicken Schnitzel Burger':   { addons: { 'Extra Cheese': 190, 'Extra Bacon': 290, 'Extra Egg': 190, 'Extra Hollandaise': 250 } },
+  'Scotch Fillet Steak Burger': { addons: { 'Extra Cheese': 190, 'Extra Bacon': 290, 'Extra Egg': 190 } },
+  'CurryWurst & Chips':      { addons: { 'Add Chip Gravy': 230 } },
+  'Mocha':                   { sizes: { 'Small': 0, 'Medium': 100, 'Large': 200 } },
+  'Latte':                   { sizes: { 'Small': 0, 'Medium': 100, 'Large': 200 } },
+  'Milk Shake':              { choices: ['Chocolate', 'Vanilla', 'Strawberry', 'Caramel', 'Banana', 'Spear Mint', 'Coffee', 'Mango'] },
+  'Big Breakfast with German Bratwurst': { choices: ['Over medium', 'Over easy', 'Over hard', 'Scrambled', 'Poached', 'Sunny-side up'] },
+};
+
+const MAX_QTY_PER_LINE = 50;
+
+function normaliseName(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function findOptions(name) {
+  const key = Object.keys(ITEM_OPTIONS).find((k) => normaliseName(k) === normaliseName(name));
+  return key ? ITEM_OPTIONS[key] : {};
+}
+
+/**
+ * Works out the real price of one cart line on the server.
+ * Returns { ok: true, line } or { ok: false, error } with a customer-friendly message.
+ */
+function priceCartLine(item, menuByName, markupMultiplier) {
+  const menuItem = menuByName[normaliseName(item.name)];
+  if (!menuItem) {
+    return { ok: false, error: `"${item.name}" is no longer available. Please refresh the menu and try again.` };
+  }
+
+  const qty = Number(item.qty);
+  if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY_PER_LINE) {
+    return { ok: false, error: `Quantity for "${menuItem.name}" must be between 1 and ${MAX_QTY_PER_LINE}.` };
+  }
+
+  const opts = findOptions(menuItem.name);
+  let unitCents = Math.round(Number(menuItem.base_price_cents) * markupMultiplier);
+  const bits = [];
+
+  // Size
+  if (opts.sizes) {
+    const size = item.sizeLabel || Object.keys(opts.sizes)[0];
+    if (!(size in opts.sizes)) {
+      return { ok: false, error: `Size "${size}" isn't available for "${menuItem.name}". Please refresh and try again.` };
+    }
+    unitCents += opts.sizes[size];
+    bits.push(size);
+  } else if (item.sizeLabel) {
+    return { ok: false, error: `"${menuItem.name}" doesn't come in sizes. Please refresh and try again.` };
+  }
+
+  // Free single choice (flavour, egg style)
+  if (item.choiceLabel) {
+    if (!opts.choices || opts.choices.indexOf(item.choiceLabel) === -1) {
+      return { ok: false, error: `"${item.choiceLabel}" isn't an option for "${menuItem.name}". Please refresh and try again.` };
+    }
+    bits.push(item.choiceLabel);
+  }
+
+  // Free multi choice (not used on Wunderbar yet)
+  const multi = Array.isArray(item.multiChoiceLabels) ? item.multiChoiceLabels : [];
+  if (multi.length) {
+    if (!opts.multi || multi.some((m) => opts.multi.indexOf(m) === -1)) {
+      return { ok: false, error: `Invalid option selected for "${menuItem.name}". Please refresh and try again.` };
+    }
+    bits.push(multi.join(', '));
+  }
+
+  // Priced add-ons
+  const addons = Array.isArray(item.addonLabels) ? item.addonLabels : [];
+  const seen = {};
+  for (const label of addons) {
+    if (!opts.addons || !(label in opts.addons) || seen[label]) {
+      return { ok: false, error: `Add-on "${label}" isn't available for "${menuItem.name}". Please refresh and try again.` };
+    }
+    seen[label] = true;
+    unitCents += opts.addons[label];
+  }
+  if (addons.length) bits.push(addons.join(', '));
+
+  return {
+    ok: true,
+    line: {
+      name: menuItem.name,
+      selectionText: bits.join(' \u00b7 '),
+      unitCents,
+      qty,
+    },
+  };
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -70,9 +176,12 @@ exports.handler = async (event) => {
   if (!customerName || !phone || !Array.isArray(items) || items.length === 0) {
     return jsonResponse(400, { ok: false, error: 'customerName, phone, and a non-empty items array are required' });
   }
+  if (items.length > 100) {
+    return jsonResponse(400, { ok: false, error: 'Too many items in one order.' });
+  }
   for (const item of items) {
-    if (!item.name || typeof item.unitPrice !== 'number' || typeof item.qty !== 'number' || item.qty < 1) {
-      return jsonResponse(400, { ok: false, error: 'Each item needs a name, numeric unitPrice, and qty >= 1' });
+    if (!item || !item.name) {
+      return jsonResponse(400, { ok: false, error: 'Each item needs a name.' });
     }
   }
 
@@ -90,19 +199,36 @@ exports.handler = async (event) => {
   // to constructing it from "host" if a browser or proxy doesn't send "origin".
   const origin = event.headers.origin || `https://${event.headers.host}`;
 
-  // Total the customer pays, in cents -- this already includes the cafe's
-  // markup_percent, since item.unitPrice is the marked-up display price.
-  const totalCents = items.reduce(
-    (sum, item) => sum + Math.round(item.unitPrice * 100) * item.qty,
-    0
-  );
+  // ── Price every line on the server from Supabase (never from the browser) ──
+  let menuItems;
+  try {
+    menuItems = await getMenuItems(cafe.id);
+  } catch (e) {
+    console.error('Menu lookup failed:', e.message);
+    return jsonResponse(503, { ok: false, error: 'The menu is temporarily unavailable. Please try again in a minute.' });
+  }
+  const menuByName = {};
+  for (const m of menuItems) menuByName[normaliseName(m.name)] = m;
+
+  const markupMultiplier = 1 + Number(cafe.markup_percent) / 100;
+  if (!Number.isFinite(markupMultiplier) || markupMultiplier < 1) {
+    console.error(`Cafe "${cafeSlug}" has an invalid markup_percent:`, cafe.markup_percent);
+    return jsonResponse(500, { ok: false, error: 'Cafe pricing is misconfigured.' });
+  }
+
+  const pricedLines = [];
+  for (const item of items) {
+    const result = priceCartLine(item, menuByName, markupMultiplier);
+    if (!result.ok) return jsonResponse(400, { ok: false, error: result.error });
+    pricedLines.push(result.line);
+  }
+
+  // Total the customer pays, in cents (includes markup + sizes/add-ons).
+  const totalCents = pricedLines.reduce((sum, l) => sum + l.unitCents * l.qty, 0);
 
   // Work backwards from the total to the true (pre-markup) amount the cafe
-  // should receive, using the same markup_percent stored in Supabase that
-  // the site's prices were built from. Rounding is unavoidable here (cents
-  // can't split perfectly) -- the platform absorbs any fractional cent via
-  // the application fee, which is the safer side for that to land on.
-  const markupMultiplier = 1 + Number(cafe.markup_percent) / 100;
+  // should receive, using the cafe's markup_percent. The platform absorbs any
+  // fractional cent via the application fee.
   const cafeReceivesCents = Math.round(totalCents / markupMultiplier);
   const applicationFeeCents = totalCents - cafeReceivesCents;
 
@@ -111,15 +237,15 @@ exports.handler = async (event) => {
     managed_payments: { enabled: false },
     success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/`,
-    line_items: items.map((item) => ({
+    line_items: pricedLines.map((l) => ({
       price_data: {
         currency,
         product_data: {
-          name: item.selectionText ? `${item.name} (${item.selectionText})` : item.name,
+          name: l.selectionText ? `${l.name} (${l.selectionText})` : l.name,
         },
-        unit_amount: Math.round(item.unitPrice * 100),
+        unit_amount: l.unitCents,
       },
-      quantity: item.qty,
+      quantity: l.qty,
     })),
     // Keep metadata to short customer/pickup fields only -- item details are
     // reconstructed from Stripe's own line items in confirm-order.js, since
