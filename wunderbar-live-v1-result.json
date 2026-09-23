@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "You must complete your platform profile to use Connect and create live connected accounts. Visit your dashboard at https://dashboard.stripe.com/connect/accounts/overview to answer the questionnaire.",
+    "request_log_url": "https://dashboard.stripe.com/acct_1UGRkFP0a88HkJ78/workbench/logs?object=req_knJoOqiDviSACt",
+    "type": "invalid_request_error"
+  }
+}

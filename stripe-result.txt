@@ -1,0 +1,8 @@
+{
+    "error": {
+        "code": "account_create_activation_required",
+        "doc_url": "https://dashboard.stripe.com/account/onboarding",
+        "message": "Your account must be activated in order to create accounts. You can activate your accounts at https://dashboard.stripe.com/account/onboarding.",
+        "request_log_url": "https://dashboard.stripe.com/logs/req_v2sXC5mBAGlPKzJ8B"
+    }
+}

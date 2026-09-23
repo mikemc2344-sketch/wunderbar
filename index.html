@@ -1209,8 +1209,122 @@ function formatTime(h, m){
   var h12 = h % 12; if(h12 === 0) h12 = 12;
   return h12 + ':' + (m < 10 ? '0' + m : m) + period;
 }
+
+/* ---------- Live menu from Supabase ----------
+   The menu cards above are a built-in fallback. On load we fetch the live menu
+   (name, description, category, order, price, active) from Supabase and redraw
+   the cards. Photos and options (sizes, add-ons, flavours) still come from the
+   PRODUCTS data in this page, matched by item name.
+   If Supabase can't be reached or returns nothing, the built-in menu stays. */
+var SUPABASE_URL = 'https://oaueacliigimgbygxvmc.supabase.co'; // <-- paste your Project URL here
+var SUPABASE_KEY = 'sb_publishable_tj8t-bcfoNA6ORQaumNByg_RU9kZAyk'; // publishable key: safe in the browser
+var CAFE_ID      = '238a0602-0cfa-475c-b6b3-c3c59faaf973';
+var MENU_TABLE   = 'menu_items';
+var MARKUP       = 0.15; // café enters real in-store prices; online price = +15%
+
+var PLACEHOLDER_PHOTO = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">' +
+  '<rect width="400" height="300" fill="#f3ead8"/>' +
+  '<text x="200" y="160" font-family="Georgia,serif" font-size="28" fill="#b89a6a" text-anchor="middle">Wunderbar</text>' +
+  '</svg>');
+
+function onlinePrice(cents){
+  return Math.round(cents * (1 + MARKUP)) / 100;
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function loadLiveMenu(){
+  if(SUPABASE_URL.indexOf('YOUR-PROJECT-REF') !== -1){
+    console.warn('Live menu: SUPABASE_URL not set yet, using built-in menu.');
+    return;
+  }
+  var url = SUPABASE_URL + '/rest/v1/' + MENU_TABLE +
+    '?select=id,category,name,description,base_price_cents,image_url,sort_order' +
+    '&cafe_id=eq.' + CAFE_ID +
+    '&active=eq.true' +
+    '&order=sort_order.asc';
+
+  fetch(url, { headers: { apikey: SUPABASE_KEY } })
+    .then(function(res){
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function(rows){
+      if(!Array.isArray(rows) || rows.length === 0){
+        throw new Error('no rows returned (check the RLS read policy)');
+      }
+      // If the customer already started adding items on the fallback menu,
+      // don't swap the cards out from under them.
+      if(Object.keys(cart).length > 0){
+        console.warn('Live menu: cart already in use, keeping built-in menu for this visit.');
+        return;
+      }
+      applyLiveMenu(rows);
+    })
+    .catch(function(err){
+      console.warn('Live menu unavailable, using built-in menu:', err.message);
+    });
+}
+
+function applyLiveMenu(rows){
+  // Photos + option configs from the built-in data, keyed by item name.
+  var local = {};
+  Object.keys(PRODUCTS).forEach(function(k){
+    local[PRODUCTS[k].name.trim().toLowerCase()] = PRODUCTS[k];
+  });
+
+  var live = {};
+  var categories = [];   // in first-seen order (rows are sorted by sort_order)
+  var byCategory = {};
+
+  rows.forEach(function(r){
+    var extra = local[String(r.name).trim().toLowerCase()] || {};
+    live[r.id] = {
+      name: r.name,
+      price: onlinePrice(r.base_price_cents),
+      photo: r.image_url || extra.photo || PLACEHOLDER_PHOTO,
+      desc: r.description || '',
+      sizes: extra.sizes,
+      addons: extra.addons,
+      choiceGroup: extra.choiceGroup,
+      multiChoice: extra.multiChoice
+    };
+    var cat = r.category || 'Menu';
+    if(!byCategory[cat]){ byCategory[cat] = []; categories.push(cat); }
+    byCategory[cat].push(r.id);
+  });
+
+  PRODUCTS = live;
+
+  var html = categories.map(function(cat){
+    var cards = byCategory[cat].map(function(id){
+      var p = PRODUCTS[id];
+      return '<button class="product-card" type="button" data-id="' + escapeHtml(id) + '" onclick="openProduct(\'' + escapeHtml(id) + '\')">' +
+          '<div class="product-photo">' +
+            '<img src="' + p.photo + '" alt="" class="product-photo-img">' +
+            '<span class="selected-badge">&#10003;</span>' +
+          '</div>' +
+          '<div class="product-info">' +
+            '<div class="product-title-row"><h4>' + escapeHtml(p.name) + '</h4><span class="product-price">$' + p.price.toFixed(2) + '</span></div>' +
+            '<p>' + escapeHtml(p.desc) + '</p>' +
+          '</div>' +
+        '</button>';
+    }).join('');
+    return '<div class="category"><h2>' + escapeHtml(cat) + '</h2><div class="menu-grid">' + cards + '</div></div>';
+  }).join('');
+
+  document.querySelector('#page-menu .menu-wrap').innerHTML = html;
+  console.log('Live menu loaded: ' + rows.length + ' items from Supabase.');
+}
+
 buildTimeOptions();
 checkForStripeReturn();
+loadLiveMenu();
 </script>
 
 </body>

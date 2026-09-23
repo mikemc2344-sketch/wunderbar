@@ -1,0 +1,98 @@
+{
+    "id": "acct_1UGRkFP0a88HkJ78",
+    "object": "account",
+    "business_profile": {
+        "annual_revenue": null,
+        "estimated_worker_count": null,
+        "mcc": "7399",
+        "minority_owned_business_designation": null,
+        "name": "Michael Jay McQueen",
+        "specified_commercial_transactions_act_url": null,
+        "support_address": null,
+        "support_email": null,
+        "support_phone": "+61447973212",
+        "support_url": null,
+        "url": "mike.goldenbee.fyi"
+    },
+    "business_type": "company",
+    "capabilities": {
+        "afterpay_clearpay_payments": "active",
+        "bancontact_payments": "active",
+        "blik_payments": "active",
+        "card_payments": "active",
+        "cartes_bancaires_payments": "pending",
+        "eps_payments": "active",
+        "klarna_payments": "active",
+        "link_payments": "active",
+        "mb_way_payments": "active",
+        "pay_by_bank_payments": "active",
+        "pix_payments": "active",
+        "satispay_payments": "active",
+        "scalapay_payments": "active",
+        "transfers": "active",
+        "zip_payments": "active"
+    },
+    "charges_enabled": true,
+    "company": {
+        "name": "MICHAEL JAY MCQUEEN",
+        "structure": "sole_proprietorship"
+    },
+    "controller": {
+        "type": "account"
+    },
+    "country": "AU",
+    "default_currency": "aud",
+    "details_submitted": true,
+    "email": "mikemc2344@gmail.com",
+    "payouts_enabled": true,
+    "settings": {
+        "bacs_debit_payments": {
+            "display_name": "Stripe",
+            "service_user_number": "449900"
+        },
+        "branding": {
+            "icon": null,
+            "logo": null,
+            "primary_color": null,
+            "secondary_color": null
+        },
+        "card_issuing": {
+            "tos_acceptance": {
+                "date": null,
+                "ip": null
+            }
+        },
+        "card_payments": {
+            "statement_descriptor_prefix": null,
+            "statement_descriptor_prefix_kana": null,
+            "statement_descriptor_prefix_kanji": null
+        },
+        "dashboard": {
+            "display_name": "Michael Jay McQueen",
+            "timezone": "Australia/Perth"
+        },
+        "invoices": {
+            "default_account_tax_ids": null,
+            "hosted_payment_method_save": "offer"
+        },
+        "payments": {
+            "statement_descriptor": "MCQUEEN",
+            "statement_descriptor_kana": null,
+            "statement_descriptor_kanji": null
+        },
+        "payouts": {
+            "debit_negative_balances": true,
+            "schedule": {
+                "delay_days": 2,
+                "interval": "weekly",
+                "weekly_anchor": "monday",
+                "weekly_payout_days": [
+                    "monday"
+                ]
+            },
+            "statement_descriptor": null
+        },
+        "sepa_debit_payments": {}
+    },
+    "type": "standard"
+}
