@@ -42,7 +42,7 @@ exports.handler = async (event) => {
       return jsonResponse(404, { ok: false, error: (session.error && session.error.message) || 'Session not found.' });
     }
 
-    const lineItemsRes = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}/line_items?limit=100`, { headers: authHeaders });
+    const lineItemsRes = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}/line_items?limit=100&expand%5B%5D=data.price.product`, { headers: authHeaders });
     const lineItemsData = await lineItemsRes.json();
     lineItems = lineItemsData.data || [];
   } catch (e) {
@@ -57,11 +57,18 @@ exports.handler = async (event) => {
   }
 
   const meta = session.metadata || {};
-  const items = lineItems.map((li) => ({
-    name: li.description,
-    qty: li.quantity,
-    unitPrice: li.amount_total / 100 / li.quantity,
-  }));
+  const items = lineItems.map((li) => {
+    // The customer's note is stored on the line's product (see
+    // create-checkout-session.js); expand=data.price.product brings it back.
+    const product = li.price && typeof li.price.product === 'object' ? li.price.product : null;
+    const notes = (product && product.metadata && product.metadata.notes) || '';
+    return {
+      name: li.description,
+      qty: li.quantity,
+      unitPrice: li.amount_total / 100 / li.quantity,
+      notes,
+    };
+  });
 
   const order = {
     orderId: meta.orderId || sessionId.slice(-8).toUpperCase(),

@@ -135,6 +135,10 @@ function priceCartLine(item, menuByName, markupMultiplier) {
   }
   if (addons.length) bits.push(addons.join(', '));
 
+  // Customer note for the kitchen (e.g. "no onion"). Kept short: Stripe
+  // metadata values are capped at 500 characters.
+  const notes = String(item.notes || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+
   return {
     ok: true,
     line: {
@@ -142,6 +146,7 @@ function priceCartLine(item, menuByName, markupMultiplier) {
       selectionText: bits.join(' \u00b7 '),
       unitCents,
       qty,
+      notes,
     },
   };
 }
@@ -242,6 +247,10 @@ exports.handler = async (event) => {
         currency,
         product_data: {
           name: l.selectionText ? `${l.name} (${l.selectionText})` : l.name,
+          // Shown under the item on Stripe's payment page, so the customer can see their note was kept
+          description: l.notes ? `Note: ${l.notes}` : undefined,
+          // Read back by confirm-order.js so the note reaches the order email
+          metadata: l.notes ? { notes: l.notes } : undefined,
         },
         unit_amount: l.unitCents,
       },
